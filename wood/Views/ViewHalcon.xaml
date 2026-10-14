@@ -1,0 +1,730 @@
+﻿<Window x:Class="wood.Views.ViewHalcon"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:halcon="clr-namespace:HalconDotNet;assembly=halcondotnet"
+        xmlns:nodify="clr-namespace:Nodify;assembly=Nodify"
+        xmlns:local="clr-namespace:wood.Views"
+        xmlns:vm="clr-namespace:wood.ViewModels"
+        mc:Ignorable="d"
+        Title="Halcon Inspection Tool" Height="700" Width="1150"
+        Background="#F4F5F7">
+
+    <Window.DataContext>
+        <vm:VM/>
+    </Window.DataContext>
+
+    <Window.Resources>
+        <!-- Style dùng chung cho Button Toolbar dọc -->
+        <Style TargetType="Button" x:Key="ActionButtonStyle">
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" x:Name="border">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" TargetName="border" Value="0.88"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" TargetName="border" Value="0.75"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style cho TextBox ReadOnly -->
+        <Style TargetType="TextBox" x:Key="ReadOnlyTextBoxStyle">
+            <Setter Property="Background" Value="#F8F9FA"/>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" x:Name="border">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style cho Editable TextBox nhập ngưỡng -->
+        <Style TargetType="TextBox" x:Key="InputThresholdTextBoxStyle">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" x:Name="border">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Main Content Area -->
+            <RowDefinition Height="*"/>
+            <!-- Status Bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- TAB CONTROL CHÍNH -->
+        <TabControl Grid.Row="0" Margin="10" Background="Transparent" BorderThickness="0">
+
+            <!-- TAB 1: GIAO DIỆN KIỂM TRA VISION & HALCON -->
+            <TabItem Header=" 👁 Main Inspection " FontSize="13" FontWeight="SemiBold">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <!-- Cột 0: Toolbar dọc (Left Navigation) -->
+                        <ColumnDefinition Width="210"/>
+                        <!-- Cột 1: Hiển thị hình ảnh HALCON -->
+                        <ColumnDefinition Width="1.2*"/>
+                        <!-- Cột 2: Control Panel / Sidebar bên phải -->
+                        <ColumnDefinition Width="380"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- HEADER / TOOLBAR BANNER (DỌC BÊN TRÁI) -->
+                    <Border Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Grid.Column="0" Margin="0,0,12,0" Padding="14">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" Color="#000000" Direction="0" Opacity="0.04" />
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Title / Logo Section -->
+                            <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                                <StackPanel HorizontalAlignment="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="#007ACC" CornerRadius="6" Height="30" Margin="0,0,8,0" Width="30">
+                                        <TextBlock FontSize="15" Foreground="White" HorizontalAlignment="Center" Text="👁" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock FontSize="13" FontWeight="Bold" Foreground="#111827" Text="Vision Pipeline"/>
+                                        <TextBlock FontSize="10" Foreground="#6B7280" Text="HALCON Engine"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <Separator Background="#F3F4F6" Margin="0,14,0,0"/>
+                            </StackPanel>
+
+                            <!-- Action Toolbar Buttons Dọc -->
+                            <StackPanel Grid.Row="1" Orientation="Vertical">
+                                <TextBlock FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" Margin="0,0,0,8" Text="ACTIONS"/>
+
+                                <Button Background="#007ACC" Command="{Binding OpenImageCommand}" Content="📂 Chọn Ảnh" Style="{StaticResource ActionButtonStyle}"/>
+                                <Button Background="#10B981" Command="{Binding RunPipelineCommand}" Content="▶ Chạy 1 lần" Style="{StaticResource ActionButtonStyle}"/>
+                                <Button Background="#6B7280" Command="{Binding ClearCommand}" Content="🗑 Xoá Ảnh" Style="{StaticResource ActionButtonStyle}"/>
+                                <Button Background="#F59E0B" Click="BtnRegion_Click" Content="▣ Chọn Vùng Xử Lý" Style="{StaticResource ActionButtonStyle}"/>
+                                <Button Background="#16A34A" Click="BtnFinishRegion_Click" Content="✓ Xác Nhận Vùng Chọn" Style="{StaticResource ActionButtonStyle}"/>
+                                <Button Background="#10B981" Click="BtnTrigger_Click" Content="▶ Chụp Ảnh (Trigger)" Style="{StaticResource ActionButtonStyle}"/>
+
+                                <!-- Khối Auto Timer hiện tại -->
+                                <!-- Khối Auto Timer -->
+                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,4,0,8">
+                                    <StackPanel>
+                                        <TextBlock FontSize="14" FontWeight="Bold" Foreground="#475569" Margin="0,0,0,4" Text="⏱ Tự động chụp sau : "/>
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="30"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,0,4,0"
+                 Text="{Binding AutoTimerIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 ToolTip="Nhập số giây chu kỳ tự động chụp"/>
+                                            <TextBlock Grid.Column="1" Text="giây" VerticalAlignment="Center" FontSize="11" Foreground="#64748B"/>
+                                        </Grid>
+                                        <Button Command="{Binding ToggleAutoTimerCommand}" 
+                Foreground="White" Padding="8,6" FontWeight="SemiBold" BorderThickness="0"
+                HorizontalContentAlignment="Center">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+                                                    <Setter Property="Margin" Value="0"/>
+                                                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAutoTimerRunning}" Value="True">
+                                                            <Setter Property="Content" Value="⏹ Dừng Auto"/>
+                                                            <Setter Property="Background" Value="#EF4444"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsAutoTimerRunning}" Value="False">
+                                                            <Setter Property="Content" Value="▶ Bật Auto"/>
+                                                            <Setter Property="Background" Value="#0284C7"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Khối Chế độ Quét Phím Enter (Barcode Scanner) -->
+                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock FontSize="10" FontWeight="Bold" Foreground="#475569" Margin="0,0,0,4" Text="⌨ BARCODE / ENTER MODE"/>
+                                        <ToggleButton IsChecked="{Binding IsBarcodeModeActive, Mode=TwoWay}" 
+             Padding="8,6" FontWeight="SemiBold" BorderThickness="0"
+             HorizontalContentAlignment="Center">
+                                            <ToggleButton.Style>
+                                                <Style TargetType="ToggleButton">
+                                                    <Setter Property="Margin" Value="0"/>
+                                                    <Setter Property="Background" Value="#64748B"/>
+                                                    <Setter Property="Content" Value="⚪ Bật Nhận Enter"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBarcodeModeActive}" Value="True">
+                                                            <Setter Property="Content" Value="🟢 Tắt Nhận Enter"/>
+                                                            <Setter Property="Background" Value="#10B981"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ToggleButton.Style>
+                                        </ToggleButton>
+                                    </StackPanel>
+                                </Border>
+
+                            </StackPanel>
+
+                            <!-- Nodify Container -->
+                            <Grid Grid.Row="2" Height="36" VerticalAlignment="Bottom">
+                                <nodify:NodifyEditor Visibility="Collapsed"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- KHU VỰC HIỂN THỊ ẢNH HALCON (Ở GIỮA) -->
+                    <Border Background="#0F172A" ClipToBounds="True" CornerRadius="8" Grid.Column="1" Margin="0,0,12,0">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" Color="#000000" Direction="0" Opacity="0.08" />
+                        </Border.Effect>
+
+                        <Grid>
+                            <!-- HALCON Window Control -->
+                            <halcon:HSmartWindowControlWPF HorizontalAlignment="Stretch" VerticalAlignment="Stretch" x:Name="hWindowControl"/>
+
+                            <!-- Watermark hiển thị khi chưa load ảnh -->
+                            <Border Background="#1E293B" CornerRadius="6" HorizontalAlignment="Center" IsHitTestVisible="False" Padding="16,10" VerticalAlignment="Center">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentImage}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontSize="15" Foreground="#64748B" Margin="0,0,8,0" Text="🖼" VerticalAlignment="Center"/>
+                                    <TextBlock FontSize="13" FontWeight="Medium" Foreground="#94A3B8" Text="No Image Loaded" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- KHU VỰC THÔNG TIN, KẾT QUẢ & PIPELINE OVERVIEW (BÊN PHẢI) -->
+                    <Border Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Grid.Column="2" Padding="14">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" Color="#000000" Direction="0" Opacity="0.04" />
+                        </Border.Effect>
+
+                        <ScrollViewer Focusable="False" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock FontSize="15" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,10" Text="Pipeline Overview"/>
+
+                                <!-- 1. Thông tin File ảnh & Trạng thái -->
+                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#475569" Margin="0,0,0,4" Text="Image Source Path"/>
+                                        <TextBox IsReadOnly="True" Margin="0,0,0,8" Style="{StaticResource ReadOnlyTextBoxStyle}" Text="{Binding ImagePath, Mode=OneWay}" TextWrapping="Wrap"/>
+
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#475569" Margin="0,0,0,4" Text="Execution Status"/>
+                                        <TextBlock FontSize="12" FontWeight="Medium" Foreground="#0284C7" Text="{Binding StatusMessage}" TextWrapping="Wrap" LineHeight="16"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 2. Kết quả kiểm tra chính -->
+                                <TextBlock FontSize="13" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,6" Text="Inspection Classification"/>
+                                <TextBox AcceptsReturn="True" Height="50" IsReadOnly="True" FontSize="24" FontWeight="Bold" 
+                                         Foreground="#059669" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                         Style="{StaticResource ReadOnlyTextBoxStyle}" 
+                                         Text="{Binding TextureResult.Merterial, Mode=OneWay, FallbackValue='N/A'}" 
+                                         TextWrapping="Wrap"/>
+
+                                <Separator Background="#F3F4F6" Margin="0,12,0,12"/>
+
+                                <!-- 3. Bảng thông số kỹ thuật chi tiết -->
+                                <TextBlock FontSize="12" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,8" Text="Metrics Measurement"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Texture Mean"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.TextureMean, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Texture Dev"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.TextureDeviation, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Saturation Mean"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.SaturationMean, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Saturation Dev"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.SaturationDeviation, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Gray Mean"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.GrayMean, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,6">
+                                        <TextBlock FontSize="11" Foreground="#6B7280" Text="Gray Dev"/>
+                                        <TextBox IsReadOnly="True" Style="{StaticResource ReadOnlyTextBoxStyle}"
+                                                 Text="{Binding TextureResult.GrayDeviation, Mode=OneWay, StringFormat={}{0:F2}, FallbackValue='0.00'}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Separator Background="#F3F4F6" Margin="0,0,0,12"/>
+
+                                <!-- 4. Cấu hình Ngưỡng Linh Hoạt -->
+                                <GroupBox Header=" ⚙ Cấu hình Ngưỡng Linh Hoạt cho Xốp " Margin="0,0,0,12" Padding="8" Foreground="#1E293B" FontWeight="Bold">
+                                    <StackPanel>
+                                        <TextBlock FontSize="10" Foreground="#0284C7" TextWrapping="Wrap" Margin="0,0,0,8" FontWeight="Normal"
+                                                   Text="* Bỏ tích CheckBox để bỏ qua chỉ số. Chọn '&gt;' hoặc '&lt;' để so sánh."/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,6">
+                                                <CheckBox Content="Gray Mean" IsChecked="{Binding UseGrayMean}" FontSize="10" Foreground="#475569" Margin="0,0,0,2"/>
+                                                <Grid IsEnabled="{Binding UseGrayMean}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="40"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" SelectedValuePath="Content" SelectedValue="{Binding OperatorGrayMean, Mode=TwoWay}" FontSize="11">
+                                                        <ComboBoxItem Content="&gt;"/>
+                                                        <ComboBoxItem Content="&lt;"/>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="4,0,0,0"
+                                                             Text="{Binding ThreshGrayMean, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,6">
+                                                <CheckBox Content="Gray Dev" IsChecked="{Binding UseGrayDev}" FontSize="10" Foreground="#475569" Margin="0,0,0,2"/>
+                                                <Grid IsEnabled="{Binding UseGrayDev}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="40"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" SelectedValuePath="Content" SelectedValue="{Binding OperatorGrayDev, Mode=TwoWay}" FontSize="11">
+                                                        <ComboBoxItem Content="&lt;"/>
+                                                        <ComboBoxItem Content="&gt;"/>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="4,0,0,0"
+                                                             Text="{Binding ThreshGrayDev, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,6">
+                                                <CheckBox Content="Sat Mean" IsChecked="{Binding UseSatMean}" FontSize="10" Foreground="#475569" Margin="0,0,0,2"/>
+                                                <Grid IsEnabled="{Binding UseSatMean}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="40"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" SelectedValuePath="Content" SelectedValue="{Binding OperatorSatMean, Mode=TwoWay}" FontSize="11">
+                                                        <ComboBoxItem Content="&lt;"/>
+                                                        <ComboBoxItem Content="&gt;"/>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="4,0,0,0"
+                                                             Text="{Binding ThreshSatMean, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,6">
+                                                <CheckBox Content="Sat Dev" IsChecked="{Binding UseSatDev}" FontSize="10" Foreground="#475569" Margin="0,0,0,2"/>
+                                                <Grid IsEnabled="{Binding UseSatDev}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="40"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" SelectedValuePath="Content" SelectedValue="{Binding OperatorSatDev, Mode=TwoWay}" FontSize="11">
+                                                        <ComboBoxItem Content="&lt;"/>
+                                                        <ComboBoxItem Content="&gt;"/>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="4,0,0,0"
+                                                             Text="{Binding ThreshSatDev, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,2">
+                                                <CheckBox Content="Texture Mean" IsChecked="{Binding UseTextureMean}" FontSize="10" Foreground="#475569" Margin="0,0,0,2"/>
+                                                <Grid IsEnabled="{Binding UseTextureMean}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="55"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" SelectedValuePath="Content" SelectedValue="{Binding OperatorTextureMean, Mode=TwoWay}" FontSize="11">
+                                                        <ComboBoxItem Content="&lt;"/>
+                                                        <ComboBoxItem Content="&gt;"/>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="4,0,0,0"
+                                                             Text="{Binding ThreshTextureMean, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </GroupBox>
+
+                                <!-- 5. Nút lưu / tải cấu hình -->
+                                <UniformGrid Columns="2" Margin="0,0,0,4">
+                                    <Button Content="💾 Lưu Cấu Hình" Command="{Binding SaveConfigCommand}" Margin="0,0,4,0" Padding="8,6" Background="#0284C7" Foreground="White" FontWeight="SemiBold" BorderThickness="0"/>
+                                    <Button Content="📂 Tải Cấu Hình" Command="{Binding LoadConfigCommand}" Margin="4,0,0,0" Padding="8,6" Background="#64748B" Foreground="White" FontWeight="SemiBold" BorderThickness="0"/>
+                                </UniformGrid>
+
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: CẤU HÌNH TRUYỀN THÔNG COM & IP CAMERA (LAYOUT 2 CỘT: CẤU HÌNH VS GIÁM SÁT TRỰC TIẾP) -->
+            <!-- TAB 2: CẤU HÌNH TRUYỀN THÔNG COM & IP CAMERA (ĐÃ SẮP XẾP LẠI) -->
+            <TabItem Header=" 🔌 Connection &amp; Camera " FontSize="13" FontWeight="SemiBold">
+                <Grid Margin="12">
+                    <Grid.ColumnDefinitions>
+                        <!-- Cột Trái: Toàn bộ bảng Cấu hình (COM + Camera) và Log COM -->
+                        <ColumnDefinition Width="420"/>
+                        <!-- Cột Phải: Dành riêng 100% không gian cho Live Stream Camera -->
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- CỘT 0: CÁC KHUNG CẤU HÌNH & LOG -->
+                    <ScrollViewer Grid.Column="0" Margin="0,0,12,0" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+                        <StackPanel>
+
+                            <!-- 1. Thư mục lưu ảnh -->
+                            <GroupBox Header=" 📁 Thư Mục Lưu Ảnh Đã Xử Lý " Margin="0,0,0,10" Padding="10" Foreground="#1E293B" FontWeight="Bold">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="110"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" IsReadOnly="True" 
+                                             Style="{StaticResource ReadOnlyTextBoxStyle}" 
+                                             Text="{Binding SaveFolderPath, Mode=OneWay, FallbackValue='D:\Images\Processed'}" 
+                                             VerticalContentAlignment="Center" Margin="0,0,8,0"/>
+                                    <Button Grid.Column="1" Content="📂 Chọn Thư Mục" 
+                                            Command="{Binding SelectFolderCommand}" 
+                                            Background="#0284C7" Foreground="White" Padding="8,5" 
+                                            FontWeight="SemiBold" BorderThickness="0"/>
+                                </Grid>
+                            </GroupBox>
+
+                            <!-- 2. Cấu hình COM Port & Log Dữ liệu (Gộp chung) -->
+                            <GroupBox Header=" 🔌 Cấu Hình &amp; Dữ Liệu COM Port " Margin="0,0,0,10" Padding="10" Foreground="#1E293B" FontWeight="Bold">
+                                <StackPanel>
+                                    <!-- Setup COM -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Cổng COM:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding ComPortList}" 
+                                                  SelectedItem="{Binding SelectedComPort}" 
+                                                  Margin="4,0" Height="26" VerticalContentAlignment="Center"/>
+                                        <Button Grid.Column="2" Content="🔄 Scan" Command="{Binding RefreshComPortsCommand}" 
+                                                Background="#F59E0B" Foreground="White" Padding="8,4" 
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Baud Rate:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <ComboBox Grid.Column="1" SelectedValue="{Binding SelectedBaudRate}" SelectedValuePath="Content" Margin="4,0" Height="26" VerticalContentAlignment="Center">
+                                            <ComboBoxItem Content="9600"/>
+                                            <ComboBoxItem Content="19200"/>
+                                            <ComboBoxItem Content="38400"/>
+                                            <ComboBoxItem Content="57600"/>
+                                            <ComboBoxItem Content="115200"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <UniformGrid Columns="2" Margin="0,4,0,8">
+                                        <Button Content="▶ Kết Nối" Command="{Binding ConnectComCommand}" 
+                                                Background="#10B981" Foreground="White" Padding="8,6" Margin="0,0,4,0" 
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                        <Button Content="⏹ Ngắt Kết Nối" Command="{Binding DisconnectComCommand}" 
+                                                Background="#EF4444" Foreground="White" Padding="8,6" Margin="4,0,0,0" 
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                    </UniformGrid>
+
+                                    <!-- KHU VỰC CẤU HÌNH TÍN HIỆU GIAO TIẾP -->
+                                    <Separator Background="#E2E8F0" Margin="0,4,0,8"/>
+                                    <TextBlock Text="⚙ Cấu Hình Mã Tín Hiệu (Gửi / Nhận):" VerticalAlignment="Center" Foreground="#111827" FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="85"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="75"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <!-- Thêm Row thứ 3 -->
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Mã Nhận (Trigger) -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Nhận (Trigger):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComTriggerSignal, Mode=TwoWay}"/>
+
+                                        <!-- Mã Gửi (Gỗ) -->
+                                        <TextBlock Grid.Row="0" Grid.Column="3" Text="Gửi (Gỗ):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
+                                        <TextBox Grid.Row="0" Grid.Column="4" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComResponseGo, Mode=TwoWay}"/>
+
+                                        <!-- Mã Gửi (Xốp) -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Gửi (Xốp):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComResponseXop, Mode=TwoWay}"/>
+
+                                        <!-- Mã Gửi (Lỗi/Unknown) -->
+                                        <TextBlock Grid.Row="1" Grid.Column="3" Text="Gửi (Lỗi):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
+                                        <TextBox Grid.Row="1" Grid.Column="4" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComResponseError, Mode=TwoWay}"/>
+
+
+                                        <!-- TÙY BIẾN KÝ TỰ KẾT THÚC NHẬN VÀ GỬI (Row 2) -->
+                                        <!-- Ký tự kết thúc NHẬN (Cắt gói tin) -->
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                            <CheckBox Content="End Char (Nhận):" 
+                                                      IsChecked="{Binding UseReceiveEndChar}" 
+                                                      VerticalAlignment="Center" Foreground="#475569" FontSize="11" Margin="0,0,8,0"/>
+                                            <ComboBox IsEnabled="{Binding UseReceiveEndChar}" 
+                                                      SelectedValue="{Binding ReceiveEndChar, Mode=TwoWay}" 
+                                                      SelectedValuePath="Content" 
+                                                      FontSize="11" Width="70" Height="24" 
+                                                      VerticalContentAlignment="Center" IsEditable="True"
+                                                      ToolTip="Ký tự dùng để xác định kết thúc 1 gói tin nhận">
+                                                <ComboBoxItem Content="\r\n"/>
+                                                <ComboBoxItem Content="\r"/>
+                                                <ComboBoxItem Content="\n"/>
+                                            </ComboBox>
+                                        </StackPanel>
+
+                                        <!-- Ký tự kết thúc GỬI -->
+                                        <StackPanel Grid.Row="2" Grid.Column="3" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                            <CheckBox Content="End Char (Gửi):" 
+                                                      IsChecked="{Binding UseLineEnding}" 
+                                                      VerticalAlignment="Center" Foreground="#475569" FontSize="11" Margin="0,0,8,0"/>
+                                            <ComboBox IsEnabled="{Binding UseLineEnding}" 
+                                                      SelectedValue="{Binding ComLineEnding, Mode=TwoWay}" 
+                                                      SelectedValuePath="Content" 
+                                                      FontSize="11" Width="70" Height="24" 
+                                                      VerticalContentAlignment="Center" IsEditable="True">
+                                                <ComboBoxItem Content="\r\n"/>
+                                                <ComboBoxItem Content="\r"/>
+                                                <ComboBoxItem Content="\n"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Khung Log COM -->
+                                    <Separator Background="#E2E8F0" Margin="0,0,0,8"/>
+                                    <TextBlock Text="📡 Log Dữ Liệu Nhận:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="txtReceiveCom" Height="80" Margin="0" 
+                                             Text="{Binding ReceivedComDataAll, Mode=OneWay}"
+                                             TextWrapping="Wrap" AcceptsReturn="True" 
+                                             VerticalScrollBarVisibility="Auto" IsReadOnly="True" 
+                                             Background="#1E293B" Foreground="#38BDF8"
+                                             FontFamily="Consolas" FontSize="12" Padding="6"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- 3. Kết nối Camera -->
+                            <GroupBox Header=" 📷 Cấu Hình Kết Nối Camera " Margin="0,0,0,10" Padding="10" Foreground="#1E293B" FontWeight="Bold">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="75"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Camera:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <ComboBox Grid.Column="1" Margin="4,0" Height="26" VerticalContentAlignment="Center" IsEditable="True"
+                                                  ItemsSource="{Binding CameraList}"
+                                                  SelectedItem="{Binding SelectedCameraDevice, Mode=TwoWay}"/>
+                                        <Button Grid.Column="2" Content="🔍 Quét" Padding="8,4" Command="{Binding ScanGigECamerasCommand}" Background="#0284C7" Foreground="White" BorderThickness="0"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="75"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="75"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="User:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <TextBox Grid.Column="1" Height="24" Text="{Binding CameraUser, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center"/>
+                                        <TextBlock Grid.Column="3" Text="Pass:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <PasswordBox Grid.Column="4" Height="24" x:Name="txtCamPassword" VerticalContentAlignment="Center"/>
+                                    </Grid>
+
+                                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                                        <Button Content="▶ Mở Camera" Command="{Binding StartCameraCommand}" 
+                                                Background="#10B981" Foreground="White" Padding="8,6" Margin="0,0,4,0" 
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                        <Button Content="⏹ Tắt Camera" Command="{Binding StopCameraCommand}" 
+                                                Background="#EF4444" Foreground="White" Padding="8,6" Margin="4,0,0,0" 
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- 4. Điều chỉnh thông số hình ảnh -->
+                            <GroupBox Header=" 🎛 Điều Chỉnh Thông Số Hình Ảnh " Margin="0,0,0,0" Padding="10" Foreground="#1E293B" FontWeight="Bold">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="55"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Exposure Time -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Exposure:" VerticalAlignment="Center" FontSize="11" Foreground="#475569" FontWeight="Normal"/>
+                                    <Slider Grid.Row="0" Grid.Column="1" Margin="8,0" VerticalAlignment="Center" 
+                                            Minimum="20" Maximum="300000" TickFrequency="100" IsSnapToTickEnabled="True"
+                                            Value="{Binding CamExposure, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
+                                    <TextBox Grid.Row="0" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Center" Height="24" Padding="2" FontSize="11"
+                                             Text="{Binding CamExposure, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+
+                                    <!-- Gain -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Gain:" VerticalAlignment="Center" FontSize="11" Foreground="#475569" FontWeight="Normal" Margin="0,8,0,0"/>
+                                    <Slider Grid.Row="1" Grid.Column="1" Margin="8,8,8,0" VerticalAlignment="Center" 
+                                            Minimum="1.0" Maximum="8.0" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                            Value="{Binding CamGain, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
+                                    <TextBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Center" Height="24" Padding="2" FontSize="11" Margin="0,8,0,0"
+                                             Text="{Binding CamGain, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:F1}}"/>
+
+                                    <!-- Frame Rate -->
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Frame Rate:" VerticalAlignment="Center" FontSize="11" Foreground="#475569" FontWeight="Normal" Margin="0,8,0,0"/>
+                                    <Slider Grid.Row="2" Grid.Column="1" Margin="8,8,8,0" VerticalAlignment="Center" 
+                                            Minimum="1" Maximum="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding CamFrameRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
+                                    <TextBox Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Center" Height="24" Padding="2" FontSize="11" Margin="0,8,0,0"
+                                             Text="{Binding CamFrameRate, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+
+                                    <!-- Contrast -->
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Contrast:" VerticalAlignment="Center" FontSize="11" Foreground="#475569" FontWeight="Normal" Margin="0,8,0,0"/>
+                                    <Slider Grid.Row="3" Grid.Column="1" Margin="8,8,8,0" VerticalAlignment="Center" 
+                                            Minimum="0" Maximum="200" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding CamContrast, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
+                                    <TextBox Grid.Row="3" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Center" Height="24" Padding="2" FontSize="11" Margin="0,8,0,0"
+                                             Text="{Binding CamContrast, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+
+                                    <!-- Gamma -->
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Gamma:" VerticalAlignment="Center" FontSize="11" Foreground="#475569" FontWeight="Normal" Margin="0,8,0,0"/>
+                                    <Slider Grid.Row="4" Grid.Column="1" Margin="8,8,8,0" VerticalAlignment="Center" 
+                                            Minimum="0" Maximum="255" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding CamGamma, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150}"/>
+                                    <TextBox Grid.Row="4" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Center" Height="24" Padding="2" FontSize="11" Margin="0,8,0,0"
+                                             Text="{Binding CamGamma, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                </Grid>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- CỘT 1: KHU VỰC GIÁM SÁT TRỰC TIẾP CAMERA CHUYÊN DỤNG -->
+                    <GroupBox Header=" 🎥 Luồng Camera Trực Tiếp (Live Stream) " Grid.Column="1" Foreground="#1E293B" FontWeight="Bold">
+                        <Grid Background="Black" ClipToBounds="True">
+                            <halcon:HSmartWindowControlWPF x:Name="hWindowControlLive" 
+                                                           HorizontalAlignment="Stretch" 
+                                                           VerticalAlignment="Stretch"/>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- STATUS BAR -->
+        <StatusBar Background="#1E293B" Foreground="#94A3B8" Grid.Row="1" Padding="12,6">
+            <StatusBarItem HorizontalAlignment="Stretch">
+                <Grid HorizontalAlignment="Stretch">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock FontSize="12" Foreground="#64748B" Text="Status: "/>
+                        <TextBlock FontSize="12" Foreground="#E2E8F0" Text="{Binding StatusMessage}"/>
+                    </StackPanel>
+                </Grid>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

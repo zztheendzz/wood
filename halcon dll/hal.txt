@@ -1,0 +1,36 @@
+[ModuleInitializer]
+internal static void EnsureHalconRuntime()
+{
+    var baseDir = AppContext.BaseDirectory;
+    var installedRoot = Environment.GetEnvironmentVariable("HALCONROOT");
+    var halconRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "2004",
+        "halcon-runtime");
+    Environment.SetEnvironmentVariable("HALCONROOT", halconRoot);
+    Environment.SetEnvironmentVariable("HALCONARCH", "x64-win64");
+    try
+    {
+        var fakeBinDir = Path.Combine(halconRoot, "bin", "x64-win64");
+        Directory.CreateDirectory(fakeBinDir);
+        foreach (var src in Directory.GetFiles(baseDir, "hAcq*.dll"))
+            CopyIfNewer(src, Path.Combine(fakeBinDir, Path.GetFileName(src)));
+        var genicamDir = Path.Combine(halconRoot, "genicam", "bin", "Win64_x64");
+        Directory.CreateDirectory(genicamDir);
+        foreach (var src in Directory.GetFiles(baseDir, "*_MD_VC141_*.dll"))
+            CopyIfNewer(src, Path.Combine(genicamDir, Path.GetFileName(src)));
+        foreach (var name in new[] { "clsercom.dll", "msvcp140.dll" })
+        {
+            var src = Path.Combine(baseDir, name);
+            if (File.Exists(src)) CopyIfNewer(src, Path.Combine(genicamDir, name));
+        }
+        CopyInstalledLicense(installedRoot, halconRoot);
+    }
+    catch (Exception ex)
+    {
+        System.Diagnostics.Debug.WriteLine("[HalconCamera] HALCON runtime dir setup failed: " + ex);
+    }
+    var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+    if (!path.Contains(baseDir, StringComparison.OrdinalIgnoreCase))
+        Environment.SetEnvironmentVariable("PATH", baseDir + ";" + path);
+}

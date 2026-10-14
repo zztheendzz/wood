@@ -1,0 +1,9 @@
+﻿<Application x:Class="wood.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:wood"
+             StartupUri="Views/ViewHalcon.xaml">
+    <Application.Resources>
+         
+    </Application.Resources>
+</Application>
