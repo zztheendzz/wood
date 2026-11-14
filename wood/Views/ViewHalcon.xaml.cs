@@ -47,6 +47,11 @@ namespace wood.Views
             {
                 Dispatcher.Invoke(() => RenderTriggerView(vm));
             }
+            // 4. Cập nhật ảnh Crop lên hWindowControlCrop
+            else if (e.PropertyName == nameof(VM.CroppedImage))
+            {
+                Dispatcher.Invoke(() => RenderCropView(vm));
+            }
         }
 
         /// <summary>
@@ -84,6 +89,7 @@ namespace wood.Views
             HWindow winMain = hWindowControl.HalconWindow;
 
             winMain.ClearWindow();
+
             vm.CurrentImage.GetImageSize(out int width, out int height);
 
             // Cập nhật lại khung nhìn vừa vặn với ảnh Trigger vừa chụp
@@ -120,7 +126,6 @@ namespace wood.Views
 
             try
             {
-                // Sửa lỗi toán tử nhân h * 0.25, w * 0.25
                 _regionTool.BeginDraw(window, h * 0.25, w * 0.25, h * 0.75, w * 0.75);
             }
             catch (HOperatorException ex)
@@ -140,10 +145,30 @@ namespace wood.Views
             var regionResult = (RegionResult)result.Data;
             vm.CurrentRegion = regionResult;
 
+            // 1. Vẽ ROI lên cửa sổ chính
             window.SetColor("green");
             window.SetDraw("margin");
             window.SetLineWidth(2);
             window.DispObj(regionResult.Region);
+
+            // 2. Cắt ảnh trực tiếp và hiển thị lên hWindowControlCrop thông qua ViewModel
+            vm.UpdateCroppedImage();
+        }
+
+        /// <summary>
+        /// Hiển thị ảnh đã cắt (Crop) lên hWindowControlCrop
+        /// </summary>
+        private void RenderCropView(VM vm)
+        {
+            if (vm.CroppedImage == null || !vm.CroppedImage.IsInitialized()) return;
+            if (hWindowControlCrop?.HalconWindow == null) return;
+
+            HWindow windowCrop = hWindowControlCrop.HalconWindow;
+            windowCrop.ClearWindow();
+
+            vm.CroppedImage.GetImageSize(out int width, out int height);
+            windowCrop.SetPart(0, 0, height - 1, width - 1);
+            windowCrop.DispObj(vm.CroppedImage);
         }
 
         private void BtnTrigger_Click(object sender, RoutedEventArgs e)

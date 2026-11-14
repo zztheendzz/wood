@@ -51,6 +51,9 @@ namespace wood.ViewModels
         [ObservableProperty]
         private TextureResult? textureResult;
 
+        [ObservableProperty] private bool useLineEnding = true;
+        [ObservableProperty] private string comLineEnding = "\\r\\n";
+
         public IRelayCommand OpenConnectionCommand { get; }
 
         public TcpClientService tcpService = new TcpClientService();
@@ -217,16 +220,18 @@ namespace wood.ViewModels
         [ObservableProperty]
         private bool isBarcodeModeActive = false;
 
+        [ObservableProperty]
+        private HImage? croppedImage;
+
         #endregion
 
         public VM()
         {
             _comService = new Com();
-            OpenConnectionCommand = new RelayCommand(ExecuteOpenConnection);
             _pipeline = new VisionPipeline();
             _pipeline.Add(new TextureTool());
 
-            // Đăng ký sự kiện nhận dữ liệu từ COM
+            // Đăng ký sự kiện nhận dữ liệu từ COMe
             _comService.DataReceived += OnComDataReceived;
 
             camera.OnImageGrabbed += OnCameraImageGrabbed;
@@ -244,6 +249,7 @@ namespace wood.ViewModels
         // ================= XỬ LÝ THAY ĐỔI THÔNG SỐ CAMERA TỪ UI =================
         // Debounce: kéo slider sinh rất nhiều lần thay đổi, chỉ gửi giá trị cuối
         // sau 150 ms không đổi, tránh dồn lệnh set lên camera.
+
 
         private readonly Dictionary<string, CancellationTokenSource> _debounceMap = new();
 
@@ -489,13 +495,25 @@ namespace wood.ViewModels
         private readonly Channel<string> _scanChannel = Channel.CreateUnbounded<string>();
         private TaskCompletionSource<bool>? _shotTcs;
 
-        private string GetActualEndChar() => ReceiveEndChar switch
+        private static string ParseEndChar(string? s) => s switch
         {
             "\\r" => "\r",
             "\\n" => "\n",
             "\\r\\n" => "\r\n",
-            _ => ReceiveEndChar   // tự nhập, ví dụ "END"
+            _ => s ?? string.Empty   // tự nhập, ví dụ "END"
         };
+
+        private string GetActualEndChar() => ParseEndChar(ReceiveEndChar);
+
+        private string AppendLineEnding(string data) =>
+            UseLineEnding ? data + ParseEndChar(ComLineEnding) : data;
+
+        /// <summary>Mọi lệnh gửi COM đều đi qua đây để luôn kèm ký tự kết thúc.</summary>
+        private void SendCom(string data)
+        {
+            if (_comService == null || !IsComConnected || string.IsNullOrEmpty(data)) return;
+            _comService.Send(AppendLineEnding(data));
+        }
 
         // Nhận dữ liệu COM (thread của SerialPort): gom vào buffer, tách gói theo ký tự kết thúc
         private void OnComDataReceived(string data)
@@ -595,6 +613,7 @@ namespace wood.ViewModels
                 }
                 catch (Exception ex)
                 {
+                    SendCom(ComResponseError);
                     _isTriggerPending = false;
                     StatusMessage = $"Lỗi Trigger: {ex.Message}";
                     if (_comService != null && IsComConnected)
@@ -865,7 +884,7 @@ namespace wood.ViewModels
 
             try
             {
-                _comService.Send(TextToSendCom);
+                SendCom(TextToSendCom);
                 StatusMessage = $"Đã gửi COM: {TextToSendCom}";
                 TextToSendCom = string.Empty;
             }
@@ -975,25 +994,21 @@ namespace wood.ViewModels
                 {
                     switch (result.Merterial)
                     {
-                        case "XỐP":
-                        case "1":
-                            _comService.Send(ComResponseXop);
-                            break;
-                        case "GỖ":
-                        case "2":
-                            _comService.Send(ComResponseGo);
-                            break;
-                        default:
-                            _comService.Send(ComResponseError);
-                            break;
+                        case "XỐP": SendCom(ComResponseXop); break;
+                        case "GỖ": SendCom(ComResponseGo); break;
+                        default: SendCom(ComResponseError); break;
                     }
                 }
 
                 // 5. GỌI HÀM LƯU TẠI VM (Lưu cả ảnh gốc và ảnh ROI)
                 SaveProcessedImages(CurrentImage, croppedRoi, result.Merterial);
+
+                CroppedImage?.Dispose();
+                CroppedImage = new HImage(croppedRoi);
             }
             catch (Exception ex)
             {
+                SendCom(ComResponseError);
                 StatusMessage = $"Pipeline error: {ex.Message}";
                 if (_shotTcs != null && !_shotTcs.Task.IsCompleted)
                     RecordRowResult("ERROR");
@@ -1204,7 +1219,11 @@ namespace wood.ViewModels
 
                     AutoTimerIntervalSeconds = this.AutoTimerIntervalSeconds,
                     TriggerOnAnyScan = this.TriggerOnAnyScan,
-                    SaveFolderPath = this.SaveFolderPath
+                    SaveFolderPath = this.SaveFolderPath,
+
+                    UseLineEnding = this.UseLineEnding,
+                    ComLineEnding = this.ComLineEnding,
+
                 };
 
                 string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
@@ -1216,6 +1235,34 @@ namespace wood.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Lỗi lưu cấu hình: {ex.Message}";
+            }
+        }
+        /// <summary>
+        /// Cắt ảnh dựa trên CurrentImage và CurrentRegion hiện tại để hiển thị lên cửa sổ Crop
+        /// </summary>
+        public void UpdateCroppedImage()
+        {
+            if (CurrentImage == null || !CurrentImage.IsInitialized() ||
+                CurrentRegion?.Region == null || !CurrentRegion.Region.IsInitialized())
+            {
+                return;
+            }
+
+            try
+            {
+                // 1. Áp dụng vùng chọn vào ảnh gốc
+                using HImage reduced = CurrentImage.ReduceDomain(CurrentRegion.Region);
+
+                // 2. Cắt khung hình bao quanh vùng chọn
+                using HImage cropped = reduced.CropDomain();
+
+                // 3. Gán vào thuộc tính để View hiển thị
+                CroppedImage?.Dispose();
+                CroppedImage = new HImage(cropped);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Lỗi cắt ảnh ROI: {ex.Message}";
             }
         }
 
@@ -1270,6 +1317,9 @@ namespace wood.ViewModels
                 this.AutoTimerIntervalSeconds = config.AutoTimerIntervalSeconds;
 
                 this.TriggerOnAnyScan= config.TriggerOnAnyScan;
+
+                this.UseLineEnding = config.UseLineEnding;
+                this.ComLineEnding = string.IsNullOrEmpty(config.ComLineEnding) ? "\\r\\n" : config.ComLineEnding;
 
                 LoadRegion();
 

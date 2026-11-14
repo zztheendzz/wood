@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="HslCommunication" Version="7.0.1" />
+    <PackageReference Include="Melfa.Robot" Version="0.1.22.6" />
     <PackageReference Include="Nodify" Version="7.3.0" />
     <PackageReference Include="System.Drawing.Common" Version="11.0.0-rc.1.26425.128" />
     <PackageReference Include="System.IO.Ports" Version="11.0.0-rc.1.26425.128" />
