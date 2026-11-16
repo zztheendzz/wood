@@ -15,7 +15,7 @@ namespace wood.Views
         // Biến lưu kích thước ảnh trước đó để tránh gọi SetPart vô tận khi Live Stream
         private int _lastLiveWidth = 0;
         private int _lastLiveHeight = 0;
-
+        private bool _liveMainFitted;
         public ViewHalcon()
         {
             InitializeComponent();
@@ -26,6 +26,38 @@ namespace wood.Views
                     vm.PropertyChanged += Vm_PropertyChanged;
                 }
             };
+
+            if (DataContext is VM vm)
+            {
+                vm.ImageUpdated += (img, isLive) =>
+                {
+                    if (!isLive || img == null || !img.IsInitialized()) return;
+
+                    // Frame đầu tiên: đặt vùng hiển thị = toàn ảnh (nếu không ảnh lớn sẽ bị cắt)
+                    if (!_liveMainFitted)
+                    {
+                        hWindowControlLiveMain.SetFullImagePart(img);
+                        _liveMainFitted = true;
+                    }
+
+                    var win = hWindowControlLiveMain.HalconWindow;
+                    win.ClearWindow();
+                    win.DispObj(img);
+                };
+
+                // Tắt camera thì xoá màn live, lần mở sau fit lại
+                vm.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(VM.IsCameraStreaming) && !vm.IsCameraStreaming)
+                    {
+                        hWindowControlLiveMain.HalconWindow.ClearWindow();
+                        _liveMainFitted = false;
+                    }
+                };
+            }
+
+
+
         }
         private void TxtReceiveCom_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
@@ -36,6 +68,9 @@ namespace wood.Views
                 if (atBottom || tb.ExtentHeight <= tb.ViewportHeight)
                     tb.ScrollToEnd();
             }
+
+
+
         }
         private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -108,6 +143,8 @@ namespace wood.Views
                 winMain.DispObj(vm.CurrentRegion.Region);
             }
         }
+
+
 
         #region Region & Event Handlers
 

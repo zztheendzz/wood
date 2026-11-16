@@ -216,35 +216,107 @@
                         </Grid>
                     </Border>
 
-                    <!-- KHU VỰC HIỂN THỊ ẢNH HALCON (Ở GIỮA) -->
-                    <Border Background="#0F172A" ClipToBounds="True" CornerRadius="8" Grid.Column="1" Margin="0,0,12,0">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="10" Color="#000000" Direction="0" Opacity="0.08" />
-                        </Border.Effect>
+                    <!-- KHU VỰC HIỂN THỊ (Ở GIỮA): TRÊN = LIVE STREAM, DƯỚI = ẢNH KIỂM TRA -->
+                    <Grid Grid.Column="1" Margin="0,0,12,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <!-- thanh tiêu đề + nút camera -->
+                            <RowDefinition Height="*" MinHeight="120"/>
+                            <!-- live stream -->
+                            <RowDefinition Height="6"/>
+                            <!-- splitter kéo chia tỉ lệ -->
+                            <RowDefinition Height="*" MinHeight="120"/>
+                            <!-- ảnh kiểm tra -->
+                        </Grid.RowDefinitions>
 
-                        <Grid>
-                            <!-- HALCON Window Control -->
-                            <halcon:HSmartWindowControlWPF HorizontalAlignment="Stretch" VerticalAlignment="Stretch" x:Name="hWindowControl"/>
-
-                            <!-- Watermark hiển thị khi chưa load ảnh -->
-                            <Border Background="#1E293B" CornerRadius="6" HorizontalAlignment="Center" IsHitTestVisible="False" Padding="16,10" VerticalAlignment="Center">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding CurrentImage}" Value="{x:Null}">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontSize="15" Foreground="#64748B" Margin="0,0,8,0" Text="🖼" VerticalAlignment="Center"/>
-                                    <TextBlock FontSize="13" FontWeight="Medium" Foreground="#94A3B8" Text="No Image Loaded" VerticalAlignment="Center"/>
+                        <!-- Thanh tiêu đề Live + 2 nút Mở / Tắt camera -->
+                        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8,8,0,0" Padding="10,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="#94A3B8"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCameraStreaming}" Value="True">
+                                                        <Setter Property="Fill" Value="#22C55E"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="🎥 Live Stream" FontSize="13" FontWeight="Bold" Foreground="#111827" VerticalAlignment="Center"/>
                                 </StackPanel>
-                            </Border>
-                        </Grid>
-                    </Border>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="▶ Mở Camera" Command="{Binding StartCameraCommand}"
+                                            Background="#10B981" Foreground="White" Padding="10,4" Margin="0,0,6,0"
+                                            FontWeight="SemiBold" BorderThickness="0"/>
+                                    <Button Content="⏹ Tắt Camera" Command="{Binding StopCameraCommand}"
+                                            Background="#EF4444" Foreground="White" Padding="10,4"
+                                            FontWeight="SemiBold" BorderThickness="0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Màn Live Stream -->
+                        <Border Grid.Row="1" Background="Black" ClipToBounds="True">
+                            <Grid>
+                                <halcon:HSmartWindowControlWPF x:Name="hWindowControlLiveMain"
+                                                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                <TextBlock Text="Camera đang tắt" Foreground="#64748B" FontSize="13"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCameraStreaming}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+
+                        <!-- Kéo để chia lại chiều cao Live / Ảnh kiểm tra -->
+                        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" Background="#E5E7EB"
+                                      ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"/>
+
+                        <!-- Ảnh kiểm tra (ảnh chụp khi Trigger / mở file) -->
+                        <Border Grid.Row="3" Background="#0F172A" ClipToBounds="True" CornerRadius="0,0,8,8">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" Color="#000000" Direction="0" Opacity="0.08" />
+                            </Border.Effect>
+
+                            <Grid>
+                                <!-- HALCON Window Control -->
+                                <halcon:HSmartWindowControlWPF HorizontalAlignment="Stretch" VerticalAlignment="Stretch" x:Name="hWindowControl"/>
+
+                                <!-- Watermark hiển thị khi chưa load ảnh -->
+                                <Border Background="#1E293B" CornerRadius="6" HorizontalAlignment="Center" IsHitTestVisible="False" Padding="16,10" VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CurrentImage}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontSize="15" Foreground="#64748B" Margin="0,0,8,0" Text="🖼" VerticalAlignment="Center"/>
+                                        <TextBlock FontSize="13" FontWeight="Medium" Foreground="#94A3B8" Text="No Image Loaded" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <!-- KHU VỰC THÔNG TIN, KẾT QUẢ & PIPELINE OVERVIEW (BÊN PHẢI) -->
                     <Border Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Grid.Column="2" Padding="14">
@@ -445,7 +517,7 @@
                 <Grid Margin="12">
                     <Grid.ColumnDefinitions>
                         <!-- Cột Trái: Toàn bộ bảng Cấu hình (COM + Camera) và Log COM -->
-                        <ColumnDefinition Width="420"/>
+                        <ColumnDefinition Width="520"/>
                         <!-- Cột Phải: Dành riêng 100% không gian cho Live Stream Camera -->
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
@@ -531,17 +603,11 @@
                                             <RowDefinition Height="Auto"/>
                                             <!-- Thêm Row thứ 3 -->
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Mã Nhận (Trigger) -->
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Nhận (Trigger):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
                                         <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComTriggerSignal, Mode=TwoWay}"/>
-                                        <!-- Row 3: chế độ trigger -->
-                                        <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,8,0,0"
-          Content="Mọi mã quét đều Trigger (bỏ tích = chỉ Trigger khi mã == ô 'Nhận (Trigger)')"
-          IsChecked="{Binding TriggerOnAnyScan, Mode=TwoWay}"
-          Foreground="#475569" FontSize="11" FontWeight="Normal"/>
 
                                         <!-- Mã Gửi (Gỗ) -->
                                         <TextBlock Grid.Row="0" Grid.Column="3" Text="Gửi (Gỗ):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
@@ -604,12 +670,11 @@
                                                 FontWeight="SemiBold" BorderThickness="0"/>
                                     </Grid>
                                     <TextBox x:Name="txtReceiveCom" Height="180" Margin="0"
-                                         Text="{Binding ReceivedComDataAll, Mode=OneWay}"
-                                         TextChanged="TxtReceiveCom_TextChanged"
-                                         TextWrapping="Wrap" AcceptsReturn="True"
-                                         VerticalScrollBarVisibility="Auto" IsReadOnly="True"
-                                         Background="#1E293B" Foreground="#38BDF8"
-                                         FontFamily="Consolas" FontSize="12" Padding="6"/>
+                                             Text="{Binding ReceivedComDataAll, Mode=OneWay}"
+                                             TextWrapping="Wrap" AcceptsReturn="True" 
+                                             VerticalScrollBarVisibility="Auto" IsReadOnly="True" 
+                                             Background="#1E293B" Foreground="#38BDF8"
+                                             FontFamily="Consolas" FontSize="12" Padding="6"/>
                                 </StackPanel>
                             </GroupBox>
 
