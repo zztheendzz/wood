@@ -384,7 +384,6 @@ namespace wood.Services.Communication.Camera
                 if (wasGrabbing) StartGrabbing();
             }
         }
-
         /// <summary>
         /// Chỉ gọi trong khối lock. Bỏ qua ngoại lệ nếu tham số không được camera hỗ trợ.
         /// </summary>

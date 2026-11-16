@@ -52,7 +52,7 @@ namespace wood.ViewModels
         private TextureResult? textureResult;
 
         [ObservableProperty] private bool useLineEnding = true;
-        [ObservableProperty] private string comLineEnding = "\\r\\n";
+        [ObservableProperty] private string comLineEnding = "\\n";
 
         public IRelayCommand OpenConnectionCommand { get; }
 
@@ -1319,7 +1319,7 @@ namespace wood.ViewModels
                 this.TriggerOnAnyScan= config.TriggerOnAnyScan;
 
                 this.UseLineEnding = config.UseLineEnding;
-                this.ComLineEnding = string.IsNullOrEmpty(config.ComLineEnding) ? "\\r\\n" : config.ComLineEnding;
+                this.ComLineEnding = string.IsNullOrEmpty(config.ComLineEnding) ? "\\n" : config.ComLineEnding;
 
                 LoadRegion();
 

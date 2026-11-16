@@ -49,8 +49,7 @@ namespace wood.Models
         public bool TriggerOnAnyScan {  get; set; }
         // Path
         public string SaveFolderPath { get; set; } = @"D:\Images\Processed";
-
-        public bool UseLineEnding { get; set; } = true;
+        public bool UseLineEnding { get; set; }
         public string ComLineEnding { get; set; } = "\\n";
     }
 }
