@@ -27,7 +27,16 @@ namespace wood.Views
                 }
             };
         }
-
+        private void TxtReceiveCom_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.TextBox tb)
+            {
+                // Đang ở gần cuối (cách đáy < 1 dòng) mới tự cuộn
+                bool atBottom = tb.VerticalOffset + tb.ViewportHeight >= tb.ExtentHeight - tb.FontSize * 1.5;
+                if (atBottom || tb.ExtentHeight <= tb.ViewportHeight)
+                    tb.ScrollToEnd();
+            }
+        }
         private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (sender is not VM vm) return;

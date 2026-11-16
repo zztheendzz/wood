@@ -531,11 +531,17 @@
                                             <RowDefinition Height="Auto"/>
                                             <!-- Thêm Row thứ 3 -->
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Mã Nhận (Trigger) -->
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Nhận (Trigger):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
                                         <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComTriggerSignal, Mode=TwoWay}"/>
+                                        <!-- Row 3: chế độ trigger -->
+                                        <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,8,0,0"
+          Content="Mọi mã quét đều Trigger (bỏ tích = chỉ Trigger khi mã == ô 'Nhận (Trigger)')"
+          IsChecked="{Binding TriggerOnAnyScan, Mode=TwoWay}"
+          Foreground="#475569" FontSize="11" FontWeight="Normal"/>
 
                                         <!-- Mã Gửi (Gỗ) -->
                                         <TextBlock Grid.Row="0" Grid.Column="3" Text="Gửi (Gỗ):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
@@ -587,13 +593,23 @@
 
                                     <!-- Khung Log COM -->
                                     <Separator Background="#E2E8F0" Margin="0,0,0,8"/>
-                                    <TextBlock Text="📡 Log Dữ Liệu Nhận:" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal" Margin="0,0,0,4"/>
-                                    <TextBox x:Name="txtReceiveCom" Height="80" Margin="0" 
-                                             Text="{Binding ReceivedComDataAll, Mode=OneWay}"
-                                             TextWrapping="Wrap" AcceptsReturn="True" 
-                                             VerticalScrollBarVisibility="Auto" IsReadOnly="True" 
-                                             Background="#1E293B" Foreground="#38BDF8"
-                                             FontFamily="Consolas" FontSize="12" Padding="6"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="📡 Log COM (TX gửi / RX nhận / ERR lỗi):" VerticalAlignment="Center" Foreground="#475569" FontWeight="Normal"/>
+                                        <Button Grid.Column="1" Content="🗑 Xoá Log" Command="{Binding ClearComLogCommand}"
+                                                Background="#64748B" Foreground="White" Padding="6,2" FontSize="11"
+                                                FontWeight="SemiBold" BorderThickness="0"/>
+                                    </Grid>
+                                    <TextBox x:Name="txtReceiveCom" Height="180" Margin="0"
+                                         Text="{Binding ReceivedComDataAll, Mode=OneWay}"
+                                         TextChanged="TxtReceiveCom_TextChanged"
+                                         TextWrapping="Wrap" AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto" IsReadOnly="True"
+                                         Background="#1E293B" Foreground="#38BDF8"
+                                         FontFamily="Consolas" FontSize="12" Padding="6"/>
                                 </StackPanel>
                             </GroupBox>
 

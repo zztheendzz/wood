@@ -207,6 +207,102 @@ namespace wood.ViewModels
         private string _comReceiveBuffer = string.Empty;
         private readonly object _comBufferLock = new object();
 
+        // ================= LOG COM (TX / RX / ERR) =================
+        // Mỗi dòng log:
+        //   [HH:mm:ss.fff] TX   "6"       | kết thúc: <LF> (0A)
+        //   [HH:mm:ss.fff] RX   "ABC123"  | kết thúc: <CR><LF> (0D 0A)
+        //   [HH:mm:ss.fff] RX   ""        | kết thúc: <CR><LF> (0D 0A) -> chỉ có Enter, bỏ qua
+        //   [HH:mm:ss.fff] ERR  Lỗi Trigger: ...
+        // Ký tự điều khiển nằm TRONG dữ liệu cũng được hiện ra (vd "<LF>ABC") để thấy ngay
+        // khi ký tự kết thúc cấu hình không khớp với thiết bị.
+        // Ghi lên UI (ReceivedComDataAll) và ra file <SaveFolderPath>\Logs\com_yyyyMMdd.log
+
+        private const int MaxUiLogLength = 30000;          // giữ ~30k ký tự cuối trên UI
+        private readonly object _logFileLock = new object();
+
+        /// <summary>Đổi ký tự điều khiển thành dạng nhìn thấy được: \r -> &lt;CR&gt;, \n -> &lt;LF&gt;...</summary>
+        private static string ToVisible(string? s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var sb = new StringBuilder(s.Length + 8);
+            foreach (char c in s)
+            {
+                sb.Append(c switch
+                {
+                    '\r' => "<CR>",
+                    '\n' => "<LF>",
+                    '\t' => "<TAB>",
+                    '\0' => "<NUL>",
+                    _ when c < 0x20 || c == 0x7F => $"<0x{(int)c:X2}>",
+                    _ => c.ToString()
+                });
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Mô tả ký tự kết thúc: "&lt;CR&gt;&lt;LF&gt; (0D 0A)"; rỗng -> "(không có)".</summary>
+        private static string DescribeEndChar(string? end)
+        {
+            if (string.IsNullOrEmpty(end)) return "(không có)";
+            string hex = string.Join(" ", Encoding.UTF8.GetBytes(end).Select(b => b.ToString("X2")));
+            return $"{ToVisible(end)} ({hex})";
+        }
+
+        private void ComLog(string kind, string message)
+        {
+            string line = $"[{DateTime.Now:HH:mm:ss.fff}] {kind,-4} {message}";
+
+            // 1. UI (luôn cập nhật trên UI thread, không chặn thread COM)
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+            {
+                string all = ReceivedComDataAll + line + "\n";
+                if (all.Length > MaxUiLogLength)
+                    all = all.Substring(all.Length - MaxUiLogLength);
+                ReceivedComDataAll = all;
+            });
+
+            // 2. File
+            try
+            {
+                string folder = Path.Combine(
+                    string.IsNullOrWhiteSpace(SaveFolderPath) ? AppDomain.CurrentDomain.BaseDirectory : SaveFolderPath,
+                    "Logs");
+                string path = Path.Combine(folder, $"com_{DateTime.Now:yyyyMMdd}.log");
+
+                lock (_logFileLock)
+                {
+                    Directory.CreateDirectory(folder);
+                    File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd} {line}{Environment.NewLine}", Encoding.UTF8);
+                }
+            }
+            catch
+            {
+                // Không để lỗi ghi log làm hỏng luồng chính
+            }
+        }
+
+        private void LogTx(string payload, string endChar) =>
+            ComLog("TX", $"\"{ToVisible(payload)}\" | kết thúc: {DescribeEndChar(endChar)}");
+
+        private void LogRx(string payload, string endChar, string note = "") =>
+            ComLog("RX", $"\"{ToVisible(payload)}\" | kết thúc: {DescribeEndChar(endChar)}{note}");
+
+        private void LogInfo(string message) => ComLog("INFO", message);
+
+        /// <summary>Ghi lỗi vào log và đồng thời hiện lên StatusMessage.</summary>
+        private void LogError(string message)
+        {
+            StatusMessage = message;
+            ComLog("ERR", message);
+        }
+
+        [RelayCommand]
+        private void ClearComLog()
+        {
+            ReceivedComDataAll = string.Empty;
+            ReceivedComData = string.Empty;
+        }
+
         // --- CẤU HÌNH CHẾ ĐỘ AUTO TIMER ---
         [ObservableProperty]
         private bool isAutoTimerRunning = false;
@@ -235,7 +331,7 @@ namespace wood.ViewModels
             _comService.DataReceived += OnComDataReceived;
 
             camera.OnImageGrabbed += OnCameraImageGrabbed;
-            camera.OnError += (s, err) => StatusMessage = err;
+            camera.OnError += (s, err) => LogError($"Camera: {err}");
 
             RefreshComPorts();
 
@@ -426,7 +522,8 @@ namespace wood.ViewModels
                         CurrentImage = new HImage(rawImage);
 
                         // Báo cho View render vào hWindowControl
-                        if (first) {
+                        if (first)
+                        {
                             SaveProcessedImages(CurrentImage, null, "origin");
                             first = false;
                         }
@@ -505,14 +602,35 @@ namespace wood.ViewModels
 
         private string GetActualEndChar() => ParseEndChar(ReceiveEndChar);
 
-        private string AppendLineEnding(string data) =>
-            UseLineEnding ? data + ParseEndChar(ComLineEnding) : data;
+        private string GetActualSendEndChar() => UseLineEnding ? ParseEndChar(ComLineEnding) : string.Empty;
 
-        /// <summary>Mọi lệnh gửi COM đều đi qua đây để luôn kèm ký tự kết thúc.</summary>
-        private void SendCom(string data)
+        /// <summary>
+        /// Mọi lệnh gửi COM đều đi qua đây: luôn kèm ký tự kết thúc và luôn được ghi log.
+        /// Trả về true nếu gửi thành công.
+        /// </summary>
+        private bool SendCom(string data)
         {
-            if (_comService == null || !IsComConnected || string.IsNullOrEmpty(data)) return;
-            _comService.Send(AppendLineEnding(data));
+            if (string.IsNullOrEmpty(data)) return false;
+
+            string end = GetActualSendEndChar();
+
+            if (_comService == null || !IsComConnected)
+            {
+                ComLog("ERR", $"TX bỏ qua (COM chưa kết nối): \"{ToVisible(data)}\" | kết thúc: {DescribeEndChar(end)}");
+                return false;
+            }
+
+            try
+            {
+                _comService.Send(data + end);
+                LogTx(data, end);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogError($"Lỗi gửi COM \"{ToVisible(data)}\" | kết thúc: {DescribeEndChar(end)}: {ex.Message}");
+                return false;
+            }
         }
 
         // Nhận dữ liệu COM (thread của SerialPort): gom vào buffer, tách gói theo ký tự kết thúc
@@ -521,6 +639,8 @@ namespace wood.ViewModels
             if (string.IsNullOrEmpty(data)) return;
 
             var messages = new List<string>();
+            string end = string.Empty;
+            string rawWhenNoEndChar = string.Empty;
 
             lock (_comBufferLock)
             {
@@ -528,8 +648,12 @@ namespace wood.ViewModels
 
                 if (UseReceiveEndChar)
                 {
-                    string end = GetActualEndChar();
-                    if (string.IsNullOrEmpty(end)) return;
+                    end = GetActualEndChar();
+                    if (string.IsNullOrEmpty(end))
+                    {
+                        ComLog("ERR", $"RX chưa cấu hình ký tự kết thúc, dữ liệu đang chờ: \"{ToVisible(_comReceiveBuffer)}\"");
+                        return;
+                    }
 
                     int index;
                     while ((index = _comReceiveBuffer.IndexOf(end, StringComparison.Ordinal)) >= 0)
@@ -540,17 +664,38 @@ namespace wood.ViewModels
                 }
                 else
                 {
+                    rawWhenNoEndChar = _comReceiveBuffer;
                     string clean = _comReceiveBuffer.Replace("\r", "").Replace("\n", "").Replace("\0", "").Trim();
                     _comReceiveBuffer = string.Empty;
                     if (clean.Length > 0) messages.Add(clean);
                 }
             }
 
-            // Mỗi phần tử trong 'messages' là 1 gói đã được cắt tại ký tự kết thúc (\r\n).
+            // Tắt cắt gói: log nguyên chuỗi thô để vẫn thấy thiết bị gửi ký tự kết thúc gì
+            if (!UseReceiveEndChar)
+            {
+                ComLog("RX", $"\"{ToVisible(rawWhenNoEndChar)}\" | kết thúc: (tắt cắt gói - đã bỏ <CR>/<LF>/<NUL>)");
+                foreach (var m in messages)
+                    ProcessScannedCode(m);
+                return;
+            }
+
+            // Mỗi phần tử trong 'messages' là 1 gói đã được cắt tại ký tự kết thúc.
             //  - "ABC123" : mã + Enter            -> hợp lệ, trigger.
-            //  - ""       : chỉ có Enter, không mã -> BỎ QUA (HandleScannedCode sẽ không trigger).
+            //  - ""       : chỉ có Enter, không mã -> BỎ QUA (chỉ ghi log).
+            // Log nội dung TRƯỚC khi Trim để nhìn thấy ký tự thừa (vd "<LF>ABC" = cấu hình sai end char).
             foreach (var m in messages)
-                HandleScannedCode(m.Trim());
+            {
+                string code = m.Trim();
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    LogRx(m, end, " -> chỉ có ký tự kết thúc, không có mã, bỏ qua");
+                    continue;
+                }
+
+                LogRx(m, end);
+                ProcessScannedCode(code);
+            }
         }
 
         /// <summary>
@@ -558,23 +703,37 @@ namespace wood.ViewModels
         /// </summary>
         public void HandleScannedCode(string code)
         {
-            // Chỉ trigger khi có mã đi kèm. Chỉ có Enter (mã rỗng / toàn khoảng trắng) -> bỏ qua hoàn toàn:
-            // không ghi log, không đổi LastQrCode, không đưa vào hàng đợi, không chụp ảnh.
+            // Lối vào cho máy quét chế độ bàn phím (HID, RawKeyboardScanner): mã kết thúc bằng phím Enter.
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                ComLog("RX", "[HID] \"\" | kết thúc: <Enter> -> không có mã, bỏ qua");
+                return;
+            }
+
+            ComLog("RX", $"[HID] \"{ToVisible(code)}\" | kết thúc: <Enter>");
+            ProcessScannedCode(code.Trim());
+        }
+
+        /// <summary>Xử lý mã đã hợp lệ (đã log RX ở nơi gọi).</summary>
+        private void ProcessScannedCode(string code)
+        {
+            // Chỉ trigger khi có mã đi kèm.
             if (string.IsNullOrWhiteSpace(code)) return;
 
             Application.Current?.Dispatcher.Invoke(() =>
             {
                 LastQrCode = code;
-                string line = $"[{DateTime.Now:HH:mm:ss}] {code}\n";
-                ReceivedComData += line;
-                ReceivedComDataAll += line;
+                ReceivedComData += $"[{DateTime.Now:HH:mm:ss}] {code}\n";
             });
 
             // Chế độ lọc: chỉ trigger khi mã trùng ComTriggerSignal.
             // (Mặc định TriggerOnAnyScan = true: mọi lần quét CÓ MÃ đều trigger.)
             if (!TriggerOnAnyScan &&
                 !string.Equals(code, ComTriggerSignal?.Trim(), StringComparison.Ordinal))
+            {
+                LogInfo($"Mã \"{ToVisible(code)}\" khác tín hiệu trigger \"{ToVisible(ComTriggerSignal)}\" -> không chụp");
                 return;
+            }
 
             // Đưa vào hàng đợi, worker sẽ xử lý lần lượt
             _scanChannel.Writer.TryWrite(code);
@@ -608,16 +767,15 @@ namespace wood.ViewModels
                     if (finished != _shotTcs.Task)
                     {
                         _isTriggerPending = false;
-                        StatusMessage = "Quá thời gian chờ ảnh từ camera, bỏ qua lần quét này.";
+                        LogError($"Quá thời gian chờ ảnh từ camera (mã \"{ToVisible(code)}\", hàng {_pendingIndex}), bỏ qua lần quét này.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    SendCom(ComResponseError);
                     _isTriggerPending = false;
-                    StatusMessage = $"Lỗi Trigger: {ex.Message}";
-                    if (_comService != null && IsComConnected)
-                        _comService.Send(ComResponseError);
+                    LogError($"Lỗi Trigger (mã \"{ToVisible(code)}\"): {ex.Message}");
+                    // Trước đây gửi mã lỗi 2 lần (1 lần không có ký tự kết thúc) -> chỉ gửi 1 lần qua SendCom
+                    SendCom(ComResponseError);
                 }
             }
         }
@@ -702,7 +860,7 @@ namespace wood.ViewModels
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Lỗi ghi pallets.csv: {ex.Message}";
+                LogError($"Lỗi ghi pallets.csv: {ex.Message}");
             }
         }
 
@@ -770,7 +928,7 @@ namespace wood.ViewModels
             catch (Exception ex)
             {
                 IsCameraStreaming = false;
-                StatusMessage = $"Lỗi bật Camera: {ex.Message}";
+                LogError($"Lỗi bật Camera: {ex.Message}");
             }
         }
 
@@ -792,7 +950,7 @@ namespace wood.ViewModels
             catch (Exception ex)
             {
                 _isTriggerPending = false;
-                StatusMessage = $"Lỗi Trigger: {ex.Message}";
+                LogError($"Lỗi Trigger: {ex.Message}");
             }
         }
 
@@ -848,11 +1006,14 @@ namespace wood.ViewModels
 
                 IsComConnected = true;
                 StatusMessage = $"Đã kết nối {SelectedComPort} ({SelectedBaudRate} bps)";
+                LogInfo($"Kết nối {SelectedComPort} ({SelectedBaudRate} bps) | " +
+                        $"kết thúc nhận: {(UseReceiveEndChar ? DescribeEndChar(GetActualEndChar()) : "(tắt)")} | " +
+                        $"kết thúc gửi: {DescribeEndChar(GetActualSendEndChar())}");
             }
             catch (Exception ex)
             {
                 IsComConnected = false;
-                StatusMessage = $"Lỗi kết nối COM: {ex.Message}";
+                LogError($"Lỗi kết nối COM {SelectedComPort}: {ex.Message}");
             }
         }
 
@@ -864,10 +1025,11 @@ namespace wood.ViewModels
                 _comService.Disconnect();
                 IsComConnected = false;
                 StatusMessage = "Đã ngắt kết nối COM.";
+                LogInfo($"Ngắt kết nối {SelectedComPort}");
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Lỗi ngắt kết nối COM: {ex.Message}";
+                LogError($"Lỗi ngắt kết nối COM: {ex.Message}");
             }
         }
 
@@ -882,15 +1044,11 @@ namespace wood.ViewModels
 
             if (string.IsNullOrEmpty(TextToSendCom)) return;
 
-            try
+            // SendCom tự bắt lỗi và ghi log
+            if (SendCom(TextToSendCom))
             {
-                SendCom(TextToSendCom);
-                StatusMessage = $"Đã gửi COM: {TextToSendCom}";
+                StatusMessage = $"Đã gửi COM: {TextToSendCom} + {DescribeEndChar(GetActualSendEndChar())}";
                 TextToSendCom = string.Empty;
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Lỗi gửi dữ liệu COM: {ex.Message}";
             }
         }
 
@@ -954,7 +1112,7 @@ namespace wood.ViewModels
             {
                 if (CurrentImage == null || CurrentRegion == null)
                 {
-                    StatusMessage = "Please load image and set region first";
+                    LogError("Pipeline: chưa có ảnh hoặc chưa chọn vùng xử lý (ROI) -> không gửi kết quả");
                     return;
                 }
 
@@ -1008,14 +1166,11 @@ namespace wood.ViewModels
             }
             catch (Exception ex)
             {
-                SendCom(ComResponseError);
-                StatusMessage = $"Pipeline error: {ex.Message}";
+                LogError($"Pipeline error: {ex.Message}");
                 if (_shotTcs != null && !_shotTcs.Task.IsCompleted)
                     RecordRowResult("ERROR");
-                if (_comService != null && IsComConnected)
-                {
-                    _comService.Send(ComResponseError);
-                }
+                // Trước đây gửi mã lỗi 2 lần (1 lần không có ký tự kết thúc) -> chỉ gửi 1 lần qua SendCom
+                SendCom(ComResponseError);
             }
             finally
             {
@@ -1316,7 +1471,7 @@ namespace wood.ViewModels
                 this.ReceiveEndChar = string.IsNullOrEmpty(config.ReceiveEndChar) ? "\\r\\n" : config.ReceiveEndChar;
                 this.AutoTimerIntervalSeconds = config.AutoTimerIntervalSeconds;
 
-                this.TriggerOnAnyScan= config.TriggerOnAnyScan;
+                this.TriggerOnAnyScan = config.TriggerOnAnyScan;
 
                 this.UseLineEnding = config.UseLineEnding;
                 this.ComLineEnding = string.IsNullOrEmpty(config.ComLineEnding) ? "\\n" : config.ComLineEnding;
