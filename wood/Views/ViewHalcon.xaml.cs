@@ -55,9 +55,6 @@ namespace wood.Views
                     }
                 };
             }
-
-
-
         }
         private void TxtReceiveCom_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
@@ -68,9 +65,6 @@ namespace wood.Views
                 if (atBottom || tb.ExtentHeight <= tb.ViewportHeight)
                     tb.ScrollToEnd();
             }
-
-
-
         }
         private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {

@@ -7,6 +7,7 @@ using Nodify;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -215,7 +216,7 @@ namespace wood.ViewModels
         //   [HH:mm:ss.fff] ERR  Lỗi Trigger: ...
         // Ký tự điều khiển nằm TRONG dữ liệu cũng được hiện ra (vd "<LF>ABC") để thấy ngay
         // khi ký tự kết thúc cấu hình không khớp với thiết bị.
-        // Ghi lên UI (ReceivedComDataAll) và ra file <SaveFolderPath>\Logs\com_yyyyMMdd.log
+        // Ghi lên UI (ReceivedComDataAll) và ra file <SaveFolderPath>\yyyy-MM-dd\com_yyyyMMdd.log
 
         private const int MaxUiLogLength = 30000;          // giữ ~30k ký tự cuối trên UI
         private readonly object _logFileLock = new object();
@@ -264,22 +265,29 @@ namespace wood.ViewModels
             // 2. File
             try
             {
-                string folder = Path.Combine(
-                    string.IsNullOrWhiteSpace(SaveFolderPath) ? AppDomain.CurrentDomain.BaseDirectory : SaveFolderPath,
-                    "Logs");
+                // Log nằm chung thư mục ngày với ảnh: <SaveFolderPath>\yyyy-MM-dd\com_yyyyMMdd.log
+                string folder = GetTodayFolder();
                 string path = Path.Combine(folder, $"com_{DateTime.Now:yyyyMMdd}.log");
 
                 lock (_logFileLock)
                 {
-                    Directory.CreateDirectory(folder);
                     File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd} {line}{Environment.NewLine}", Encoding.UTF8);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Không để lỗi ghi log làm hỏng luồng chính
+                // Không để lỗi ghi log làm hỏng luồng chính, nhưng phải báo ra (tối đa 1 lần / 10 giây)
+                if ((DateTime.Now - _lastLogFileError).TotalSeconds > 10)
+                {
+                    _lastLogFileError = DateTime.Now;
+                    StatusMessage = $"Lỗi ghi file log ({GetBaseFolder()}): {ex.Message}";
+                    Application.Current?.Dispatcher.InvokeAsync(() =>
+                        ReceivedComDataAll += $"[{DateTime.Now:HH:mm:ss.fff}] ERR  Không ghi được file log: {ex.Message}\n");
+                }
             }
         }
+
+        private DateTime _lastLogFileError = DateTime.MinValue;
 
         private void LogTx(string payload, string endChar) =>
             ComLog("TX", $"\"{ToVisible(payload)}\" | kết thúc: {DescribeEndChar(endChar)}");
@@ -337,6 +345,9 @@ namespace wood.ViewModels
 
             // Tự nạp cấu hình khi chạy chương trình; chưa có file thì tự tạo từ giá trị mặc định trong code
             InitConfig();
+
+            // Dọn thư mục ngày cũ ngay khi mở chương trình
+            _ = Task.Run(() => { try { GetTodayFolder(); } catch { } });
 
             // Xử lý lần lượt từng lần quét (1 kiện có nhiều hàng -> quét nhiều lần)
             _ = Task.Run(ScanWorkerAsync);
@@ -1217,17 +1228,94 @@ namespace wood.ViewModels
             }
         }
 
+        // ================= THƯ MỤC THEO NGÀY + TỰ XOÁ NGÀY CŨ =================
+        // Cấu trúc:
+        //   <SaveFolderPath>\
+        //       pallets.csv
+        //       2026-11-16\  (ảnh *_Original.png, *_ROI.png + com_20261116.log)
+        //       2026-11-17\  ...
+        // Chỉ giữ KeepDays thư mục ngày gần nhất; thừa thì xoá thư mục ngày xa nhất.
+        // Chỉ xoá thư mục có tên đúng dạng yyyy-MM-dd, không bao giờ xoá thư mục hôm nay.
+
+        private const int KeepDays = 30;
+        private const string DayFolderFormat = "yyyy-MM-dd";
+
+        private readonly object _dayFolderLock = new object();
+        private string _lastCleanupKey = string.Empty;   // "<thư mục gốc>|<ngày>" đã dọn
+
+        private string GetBaseFolder() =>
+            string.IsNullOrWhiteSpace(SaveFolderPath)
+                ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data")
+                : SaveFolderPath;
+
+        /// <summary>Trả về (và tạo nếu chưa có) thư mục của ngày hôm nay. Sang ngày mới sẽ tự dọn ngày cũ.</summary>
+        private string GetTodayFolder()
+        {
+            string baseFolder = GetBaseFolder();
+            string today = DateTime.Now.ToString(DayFolderFormat, CultureInfo.InvariantCulture);
+            string folder = Path.Combine(baseFolder, today);
+            Directory.CreateDirectory(folder);
+
+            bool needCleanup = false;
+            lock (_dayFolderLock)
+            {
+                string key = baseFolder + "|" + today;
+                if (_lastCleanupKey != key)
+                {
+                    _lastCleanupKey = key;
+                    needCleanup = true;
+                }
+            }
+
+            // Dọn ở background, không làm chậm lưu ảnh / ghi log
+            if (needCleanup)
+                _ = Task.Run(() => CleanupOldDayFolders(baseFolder, today));
+
+            return folder;
+        }
+
+        private void CleanupOldDayFolders(string baseFolder, string today)
+        {
+            try
+            {
+                if (!Directory.Exists(baseFolder)) return;
+
+                var dayFolders = Directory.GetDirectories(baseFolder)
+                    .Select(p => new { Path = p, Name = Path.GetFileName(p) })
+                    .Where(x => DateTime.TryParseExact(x.Name, DayFolderFormat, CultureInfo.InvariantCulture,
+                                                       DateTimeStyles.None, out _))
+                    .OrderByDescending(x => x.Name)   // yyyy-MM-dd sắp theo chữ = sắp theo ngày
+                    .ToList();
+
+                // Giữ KeepDays ngày mới nhất, xoá phần còn lại (ngày xa nhất)
+                foreach (var old in dayFolders.Skip(KeepDays))
+                {
+                    if (old.Name == today) continue;   // an toàn: không xoá hôm nay
+                    try
+                    {
+                        Directory.Delete(old.Path, recursive: true);
+                        ComLog("INFO", $"Đã xoá thư mục ngày cũ (giữ {KeepDays} ngày): {old.Path}");
+                    }
+                    catch (Exception ex)
+                    {
+                        ComLog("ERR", $"Không xoá được thư mục ngày cũ {old.Path}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ComLog("ERR", $"Lỗi dọn thư mục ngày cũ: {ex.Message}");
+            }
+        }
+
         private void SaveProcessedImages(HImage originalImg, HImage roiImg, string materialResult)
         {
             if (originalImg == null || !originalImg.IsInitialized()) return;
 
             try
             {
-                // 1. Kiểm tra và tạo thư mục nếu chưa tồn tại
-                if (!Directory.Exists(SaveFolderPath))
-                {
-                    Directory.CreateDirectory(SaveFolderPath);
-                }
+                // 1. Thư mục của ngày hôm nay (tự tạo, tự dọn ngày cũ)
+                string dayFolder = GetTodayFolder();
 
                 string safeMaterialName = string.IsNullOrEmpty(materialResult) ? "UNKNOWN" : materialResult;
                 string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
@@ -1236,7 +1324,7 @@ namespace wood.ViewModels
 
                 // 2. Tên file cho Ảnh Gốc
                 string originalFileName = $"{timeStamp}_{qrPart}{safeMaterialName}_Original.png";
-                string originalPath = Path.Combine(SaveFolderPath, originalFileName);
+                string originalPath = Path.Combine(dayFolder, originalFileName);
 
                 // Lưu ảnh gốc
                 originalImg.WriteImage("png", 0, originalPath);
@@ -1245,13 +1333,13 @@ namespace wood.ViewModels
                 if (roiImg != null && roiImg.IsInitialized())
                 {
                     string roiFileName = $"{timeStamp}_{qrPart}{safeMaterialName}_ROI.png";
-                    string roiPath = Path.Combine(SaveFolderPath, roiFileName);
+                    string roiPath = Path.Combine(dayFolder, roiFileName);
 
                     // Lưu ảnh ROI
                     roiImg.WriteImage("png", 0, roiPath);
                 }
 
-                StatusMessage = $"Đã lưu ảnh phân tích: {safeMaterialName} vào {SaveFolderPath}";
+                StatusMessage = $"Đã lưu ảnh phân tích: {safeMaterialName} vào {dayFolder}";
             }
             catch (Exception ex)
             {

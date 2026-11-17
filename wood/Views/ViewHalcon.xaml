@@ -676,6 +676,7 @@
                                     <TextBox x:Name="txtReceiveCom" Height="180" Margin="0"
                                              Text="{Binding ReceivedComDataAll, Mode=OneWay}"
                                              TextWrapping="Wrap" AcceptsReturn="True" 
+                                              TextChanged="TxtReceiveCom_TextChanged"
                                              VerticalScrollBarVisibility="Auto" IsReadOnly="True" 
                                              Background="#1E293B" Foreground="#38BDF8"
                                              FontFamily="Consolas" FontSize="12" Padding="6"/>
