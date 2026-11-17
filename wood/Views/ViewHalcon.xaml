@@ -603,6 +603,7 @@
                                             <RowDefinition Height="Auto"/>
                                             <!-- Thêm Row thứ 3 -->
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Mã Nhận (Trigger) -->
@@ -620,7 +621,10 @@
                                         <!-- Mã Gửi (Lỗi/Unknown) -->
                                         <TextBlock Grid.Row="1" Grid.Column="3" Text="Gửi (Lỗi):" VerticalAlignment="Center" Foreground="#475569" FontSize="11"/>
                                         <TextBox Grid.Row="1" Grid.Column="4" Style="{StaticResource InputThresholdTextBoxStyle}" Margin="0,2" Text="{Binding ComResponseError, Mode=TwoWay}"/>
-
+                                        <CheckBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,8,0,0"
+          Content="Mọi mã quét đều Trigger (bỏ tích = chỉ Trigger khi mã == ô 'Nhận (Trigger)')"
+          IsChecked="{Binding TriggerOnAnyScan, Mode=TwoWay}"
+          Foreground="#475569" FontSize="11" FontWeight="Normal"/>
 
                                         <!-- TÙY BIẾN KÝ TỰ KẾT THÚC NHẬN VÀ GỬI (Row 2) -->
                                         <!-- Ký tự kết thúc NHẬN (Cắt gói tin) -->
